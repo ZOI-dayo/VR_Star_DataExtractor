@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using Csv;
@@ -8,49 +9,75 @@ namespace DataExtractor
 {
   public static class DataExtractor
   {
-    private const string OutFile = @"path¥to¥File.csv";
-    private const string GaiaPath = @"path¥to¥Gaia¥";
-    private const string HipPath = @"path¥to¥Hip.csv";
-    private const string CrossMatchPath = @"path¥to¥CrossMatch.csv";
+    private const string OutFile = @"F:\out\Compiled";
+
+    // http://cdn.gea.esac.esa.int/Gaia/gedr3/gaia_source/
+    private const string GaiaPath = @"F:\Gaia EDR3\data\raw\cdn.gea.esac.esa.int\Gaia\gedr3\gaia_source\";
+
+    // https://cdsarc.cds.unistra.fr/ftp/I/311/hip2.dat.gz
+    private const string HipPath = @"F:\Hipparcos\hip2.dat.gz";
+
+    // http://cdn.gea.esac.esa.int/Gaia/gedr3/cross_match/hipparcos2_best_neighbour/Hipparcos2BestNeighbour.csv.gz
+    private const string CrossMatchPath = @"F:\Gaia EDR3\data\cross-match\Hipparcos2BestNeighbour.csv";
 
     public static void Main()
     {
       using var outFStream = File.Open(OutFile, FileMode.OpenOrCreate);
+      outFStream.SetLength(0);
       // Gaia ID : Hipparcos ID
-      var crossMatch = new Dictionary<int, long>();
+      var crossMatch = new Dictionary<long, int>();
       var crossMatchText = File.ReadAllText(CrossMatchPath);
-      foreach (ICsvLine line in CsvReader.ReadFromText(crossMatchText))
       {
-        crossMatch[int.Parse(line[1])] = long.Parse(line[0]);
+        var lineCount = 0;
+        var fileLength = crossMatchText.Split('\n').Length;
+        foreach (var line in crossMatchText.Split('\n').Select(s => s.Split(',')))
+        {
+          lineCount++;
+          if (lineCount == 1) continue;
+          if (lineCount == fileLength) break;
+          crossMatch[long.Parse(line[0])] = int.Parse(line[1]);
+        }
       }
+
+      var loadedCrossMatch = new List<int>();
 
       var gaiaFiles = GetGaiaFiles();
       foreach (var gaiaFile in gaiaFiles)
       {
+        if(gaiaFile.Length == 0) continue;
         using var fStream = File.OpenRead(GaiaPath + gaiaFile);
         using var gStream = new GZipStream(fStream, CompressionMode.Decompress);
         using var reader = new StreamReader(gStream);
-        var isFirstLine = true;
+        var lineCount = 0;
         while (reader.EndOfStream == false)
         {
+          lineCount++;
           // 1行目はタイトルなのでスキップする
-          if (isFirstLine)
-          {
-            isFirstLine = false;
-            continue;
-          }
+          if (lineCount == 1) continue;
+
+          if(lineCount % 10000 == 0) Console.WriteLine(lineCount);
 
           var line = reader.ReadLine();
           if (line == null) continue;
           var strData = line.Split(',');
-          outFStream.Write(
-            StarData.FromGaiaProperty(
-              double.Parse(strData[5]),
-              double.Parse(strData[7]),
-              float.Parse(strData[69]),
-              float.Parse(strData[74]),
-              float.Parse(strData[79])
-            ).ToByte(), 0, 24);
+          try
+          {
+            outFStream.Write(
+              StarData.FromGaiaProperty(
+                double.Parse(strData[5]),
+                double.Parse(strData[7]),
+                float.Parse(strData[69]),
+                float.Parse(strData[74]),
+                float.Parse(strData[79])
+              ).ToByte(), 0, 24);
+            if (crossMatch.ContainsKey(long.Parse(strData[2])))
+              loadedCrossMatch.Add(crossMatch[long.Parse(strData[2])]);
+          }
+          catch (FormatException e)
+          {
+            // Console.WriteLine(e);
+            // No Enough Data
+          }
         }
       }
 
@@ -64,16 +91,24 @@ namespace DataExtractor
           var line = reader.ReadLine();
           if (line == null) continue;
           var id = int.Parse(line[..7]);
-          if (crossMatch.ContainsKey(id)) continue;
-          // B-V?V-B?
-          // キャスト
-          outFStream.Write(
-            new StarData(
-              double.Parse(line[15..29]),
-              double.Parse(line[29..43]),
-              float.Parse(line[129..137]),
-              -1 * float.Parse(line[152..159])
-            ).ToByte(), 0, 24);
+          if (loadedCrossMatch.Contains(id)) continue;
+
+          try
+          {
+            // https://cdsarc.cds.unistra.fr/ftp/I/311/ReadMe
+            outFStream.Write(
+              new StarData(
+                double.Parse(line[15..28]),
+                double.Parse(line[29..42]),
+                float.Parse(line[129..136]),
+                float.Parse(line[152..158])
+              ).ToByte(), 0, 24);
+          }
+          catch (FormatException e)
+          {
+            // Console.WriteLine(e);
+            // No Enough Data
+          }
         }
       }
     }
@@ -84,7 +119,12 @@ namespace DataExtractor
       var sr = new StreamReader(GaiaPath + "_MD5SUM.txt");
       var md5SumContent = sr.ReadToEnd();
       sr.Close();
-      return md5SumContent.Split('\n').Select(s => s.Split(' ')[1]);
+      return md5SumContent.Split('\n').Select(s =>
+      {
+        var keyPair = s.Split(' ');
+        if(keyPair.Length == 3) return keyPair[2];
+        return "";
+      });
     }
   }
 }

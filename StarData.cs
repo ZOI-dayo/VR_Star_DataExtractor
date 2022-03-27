@@ -17,8 +17,7 @@ namespace DataExtractor
       _bvColor = bvColor;
     }
 
-    public static StarData FromGaiaProperty(double ra, double dec, float phot_g_mean_mag, float phot_bp_mean_mag,
-      float phot_rp_mean_mag)
+    public static StarData FromGaiaProperty(double ra, double dec, float phot_g_mean_mag, float phot_bp_mean_mag, float phot_rp_mean_mag)
     {
       var G_HP = 0.0149 * Math.Pow(phot_bp_mean_mag - phot_rp_mean_mag, 3)
                  - 0.12 * Math.Pow(phot_bp_mean_mag - phot_rp_mean_mag, 2)
