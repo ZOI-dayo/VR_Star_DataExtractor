@@ -29,10 +29,6 @@ namespace DataExtractor
       return new StarData(ra, dec, phot_g_mean_mag, bvColor);
     }
 
-    //こいつはいらない?
-    // J2000.0変換のみできたらいいけどそれはGaiaも同じだから
-    // 別関数として独立させてしまえばいい?
-
     public byte[] ToByte()
     {
       var data = new byte[24];

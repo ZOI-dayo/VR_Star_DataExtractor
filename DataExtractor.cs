@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using Csv;
 using System.Linq;
 
 namespace DataExtractor
@@ -122,8 +121,7 @@ namespace DataExtractor
       return md5SumContent.Split('\n').Select(s =>
       {
         var keyPair = s.Split(' ');
-        if(keyPair.Length == 3) return keyPair[2];
-        return "";
+        return keyPair.Length == 3 ? keyPair[2] : "";
       });
     }
   }
