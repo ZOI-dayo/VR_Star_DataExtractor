@@ -28,6 +28,13 @@ namespace DataExtractor
         : -2.1 * Math.Pow(G_HP, 2) - 4.2 * G_HP - 0.45);
       return new StarData(ra, dec, phot_g_mean_mag, bvColor);
     }
+    
+    public static StarData FromHipProperty(double raRad, double decRad, float vMag, float bvColor)
+    {
+      var raDeg = raRad / Math.PI * 180D;
+      var decDeg = decRad / Math.PI * 180D;
+      return new StarData(raDeg, decDeg, vMag, bvColor);
+    }
 
     public byte[] ToByte()
     {

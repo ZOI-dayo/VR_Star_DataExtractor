@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -21,8 +22,21 @@ namespace DataExtractor
 
     public static void Main()
     {
+      var nowTime = DateTime.Now;
+      using var logSWriter =
+        new StreamWriter(
+          Path.GetDirectoryName(OutFile)
+          + @"\log_"
+          + nowTime.ToString($"{nowTime:yyyyMMddHHmmss}")
+          + ".txt");
       using var outFStream = File.Open(OutFile, FileMode.OpenOrCreate);
       outFStream.SetLength(0);
+
+      // begin
+      logSWriter.WriteLine($"Begin: {DateTime.Now.ToString(new CultureInfo("ja-JP"))}");
+
+      var errCount = new int[2];
+      var skipCount = 0;
       // Gaia ID : Hipparcos ID
       var crossMatch = new Dictionary<long, int>();
       var crossMatchText = File.ReadAllText(CrossMatchPath);
@@ -43,7 +57,7 @@ namespace DataExtractor
       var gaiaFiles = GetGaiaFiles();
       foreach (var gaiaFile in gaiaFiles)
       {
-        if(gaiaFile.Length == 0) continue;
+        if (gaiaFile.Length == 0) continue;
         using var fStream = File.OpenRead(GaiaPath + gaiaFile);
         using var gStream = new GZipStream(fStream, CompressionMode.Decompress);
         using var reader = new StreamReader(gStream);
@@ -54,7 +68,7 @@ namespace DataExtractor
           // 1行目はタイトルなのでスキップする
           if (lineCount == 1) continue;
 
-          if(lineCount % 10000 == 0) Console.WriteLine(lineCount);
+          if (lineCount % 10000 == 0) Console.WriteLine(lineCount);
 
           var line = reader.ReadLine();
           if (line == null) continue;
@@ -74,6 +88,7 @@ namespace DataExtractor
           }
           catch (FormatException e)
           {
+            errCount[0]++;
             // Console.WriteLine(e);
             // No Enough Data
           }
@@ -90,13 +105,17 @@ namespace DataExtractor
           var line = reader.ReadLine();
           if (line == null) continue;
           var id = int.Parse(line[..7]);
-          if (loadedCrossMatch.Contains(id)) continue;
+          if (loadedCrossMatch.Contains(id))
+          {
+            skipCount++;
+            continue;
+          }
 
           try
           {
             // https://cdsarc.cds.unistra.fr/ftp/I/311/ReadMe
             outFStream.Write(
-              new StarData(
+              StarData.FromHipProperty(
                 double.Parse(line[15..28]),
                 double.Parse(line[29..42]),
                 float.Parse(line[129..136]),
@@ -105,11 +124,18 @@ namespace DataExtractor
           }
           catch (FormatException e)
           {
+            errCount[1]++;
             // Console.WriteLine(e);
             // No Enough Data
           }
         }
       }
+
+      // end
+      logSWriter.WriteLine($"Error in Gaia: {errCount[0]}");
+      logSWriter.WriteLine($"Error in Hip2: {errCount[1]}");
+      logSWriter.WriteLine($"Skip in Hip2: {skipCount}");
+      logSWriter.WriteLine($"End: {DateTime.Now.ToString(new CultureInfo("ja-JP"))}");
     }
 
     private static IEnumerable<string> GetGaiaFiles()
